@@ -74,7 +74,7 @@ void RosoutPublisher::onWindowClosed()
 }
 
 
-std::vector<const PlotDataAny *> RosoutPublisher::findRosoutTimeseries(PlotDataMap *datamap)
+std::vector<const PlotDataAny *> RosoutPublisher::findRosoutTimeseries(PlotDataMapPtr *datamap)
 {
     std::vector<const PlotDataAny*> logs_timeseries;
 
@@ -157,7 +157,7 @@ void RosoutPublisher::syncWithTableModel(const std::vector<const PlotDataAny*>& 
     _tablemodel->push_back( logs );
 }
 
-void RosoutPublisher::updateState(PlotDataMap *datamap, double current_time)
+void RosoutPublisher::updateState(PlotDataMapPtr *datamap, double current_time)
 {
     if(!enabled_ && !_tablemodel) return;
 

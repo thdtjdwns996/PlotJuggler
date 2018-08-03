@@ -34,7 +34,7 @@ size_t getAvailableRAM()
     return info.freeram;
 }
 
-PlotDataMap DataLoadROS::readDataFromFile(const QString &file_name, bool use_previous_configuration)
+PlotDataMapRef DataLoadROS::readDataFromFile(const QString &file_name, bool use_previous_configuration)
 {
     if( _bag ) _bag->close();
 
@@ -44,7 +44,6 @@ PlotDataMap DataLoadROS::readDataFromFile(const QString &file_name, bool use_pre
     using namespace RosIntrospection;
 
     std::vector<std::pair<QString,QString>> all_topics;
-    PlotDataMap plot_map;
 
     try{
         _bag->open( file_name.toStdString(), rosbag::bagmode::Read );
@@ -54,7 +53,8 @@ PlotDataMap DataLoadROS::readDataFromFile(const QString &file_name, bool use_pre
         QMessageBox::warning(0, tr("Error"),
                              QString("rosbag::open thrown an exception:\n")+
                              QString(ex.what()) );
-        return PlotDataMap{};
+
+        return PlotDataMapRef{};
     }
 
     rosbag::View bag_view ( *_bag, ros::TIME_MIN, ros::TIME_MAX, true );
@@ -153,6 +153,8 @@ PlotDataMap DataLoadROS::readDataFromFile(const QString &file_name, bool use_pre
     bool parsed = true;
     bool monotonic_time = true;
 
+    PlotDataMapRef plot_map;
+
     for(rosbag::MessageInstance msg_instance: bag_view_selected )
     {
         const std::string& topic_name  = msg_instance.getTopic();
@@ -166,7 +168,7 @@ PlotDataMap DataLoadROS::readDataFromFile(const QString &file_name, bool use_pre
             QApplication::processEvents();
 
             if( progress_dialog.wasCanceled() ) {
-                return PlotDataMap();
+                return PlotDataMapRef();
             }
         }
 
@@ -200,16 +202,15 @@ PlotDataMap DataLoadROS::readDataFromFile(const QString &file_name, bool use_pre
             auto plot_pair = plot_map.numeric.find( key );
             if( (plot_pair == plot_map.numeric.end()) )
             {
-                PlotDataPtr temp(new PlotData( key.c_str() ));
-                auto res = plot_map.numeric.insert( std::make_pair(key, temp ) );
+                auto res = plot_map.numeric.insert( { key, PlotData(key) } );
                 plot_pair = res.first;
             }
 
-            PlotDataPtr& plot_data = plot_pair->second;
-            size_t data_size = plot_data->size();
+            PlotData& plot_data = plot_pair->second;
+            size_t data_size = plot_data.size();
             if( monotonic_time  && data_size>0 )
             {
-              const double last_time = plot_data->at(data_size-1).x;
+              const double last_time = plot_data.at(data_size-1).x;
               monotonic_time = (msg_time > last_time);
               if(!monotonic_time)
               {
@@ -217,7 +218,7 @@ PlotDataMap DataLoadROS::readDataFromFile(const QString &file_name, bool use_pre
                          << "]: " << msg_time << " / " << last_time;
               }
             }
-            plot_data->pushBack( PlotData::Point(msg_time, it.second.convert<double>() ));
+            plot_data.pushBack( PlotData::Point(msg_time, it.second.convert<double>() ));
         } //end of for renamed_value
     }
 
@@ -243,12 +244,11 @@ PlotDataMap DataLoadROS::readDataFromFile(const QString &file_name, bool use_pre
 
         if( plot_pair == plot_map.user_defined.end() )
         {
-            PlotDataAnyPtr temp(new PlotDataAny(key.c_str()));
-            auto res = plot_map.user_defined.insert( std::make_pair( key, temp ) );
+            auto res = plot_map.user_defined.insert( { key, PlotDataAny(key) } );
             plot_pair = res.first;
         }
-        PlotDataAnyPtr& plot_raw = plot_pair->second;
-        plot_raw->pushBack( PlotDataAny::Point(msg_time, nonstd::any(std::move(msg_instance)) ));
+        PlotDataAny& plot_raw = plot_pair->second;
+        plot_raw.pushBack( PlotDataAny::Point(msg_time, nonstd::any(std::move(msg_instance)) ));
     }
 
     if( !parsed )

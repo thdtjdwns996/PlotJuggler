@@ -45,7 +45,7 @@ void PlotWidget::setDefaultRangeX()
     }
 }
 
-PlotWidget::PlotWidget(PlotDataMap &datamap, QWidget *parent):
+PlotWidget::PlotWidget(PlotDataMapPtr &datamap, QWidget *parent):
     QwtPlot(parent),
     _zoomer( 0 ),
     _magnifier(0 ),

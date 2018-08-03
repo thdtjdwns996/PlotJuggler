@@ -96,7 +96,7 @@ void DataStreamServer::processMessage(QString message)
 		
         if (plotIt == numeric_plots.end())
         {
-			PlotDataPtr plot(new PlotData(name_str.c_str()));
+            PlotDataPtr plot(new PlotData(name_str));
             numeric_plots.insert(std::make_pair(name_str, plot));
 		}
         else{

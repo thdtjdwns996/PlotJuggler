@@ -136,7 +136,7 @@ void TopicPublisherROS::ChangeFilter(bool)
 }
 
 
-void TopicPublisherROS::updateState(PlotDataMap *datamap, double current_time)
+void TopicPublisherROS::updateState(PlotDataMapPtr *datamap, double current_time)
 {
   if(!enabled_ || !_node) return;
 

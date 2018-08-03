@@ -108,20 +108,25 @@ class CustomSortedTableItem: public QTableWidgetItem
 
 void FilterableListWidget::addItem(const QString &item_name, bool sort_columns)
 {
+    QTableWidget* table = ui->tableWidget;
+    if( table->findItems(item_name, Qt::MatchExactly).count() > 0 )
+    {
+        return;
+    }
     auto item = new CustomSortedTableItem(item_name);
     const int row = rowCount();
-    ui->tableWidget->setRowCount(row+1);
-    ui->tableWidget->setItem(row, 0, item);
+    table->setRowCount(row+1);
+    table->setItem(row, 0, item);
 
     auto val_cell = new QTableWidgetItem("-");
     val_cell->setTextAlignment(Qt::AlignRight);
     val_cell->setFlags( Qt::NoItemFlags | Qt::ItemIsEnabled );
     val_cell->setFont(  QFontDatabase::systemFont(QFontDatabase::FixedFont) );
 
-    ui->tableWidget->setItem(row, 1, val_cell );
+    table->setItem(row, 1, val_cell );
     if( sort_columns )
     {
-      ui->tableWidget->sortByColumn(0,Qt::AscendingOrder);
+      table->sortByColumn(0,Qt::AscendingOrder);
     }
 
     addToCompletionTree(item);

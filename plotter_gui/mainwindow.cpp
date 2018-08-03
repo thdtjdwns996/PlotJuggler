@@ -540,7 +540,7 @@ void MainWindow::buildDummyData()
         double C =  3* ((double)qrand()/(double)RAND_MAX)  ;
         double D =  20* ((double)qrand()/(double)RAND_MAX)  ;
 
-        PlotDataPtr plot ( new PlotData( name.toStdString().c_str() ) );
+        PlotDataPtr plot ( new PlotData( name.toStdString() ) );
 
         double t = 0;
         for (unsigned indx=0; indx<SIZE; indx++)
@@ -703,7 +703,7 @@ void MainWindow::checkAllCurvesFromLayout(const QDomElement& root)
             for(auto& name: missing_curves )
             {
                 _curvelist_widget->addItem( QString::fromStdString( name ), false );
-                _mapped_plot_data.numeric.insert( {name,  PlotDataPtr(new PlotData( name.c_str())) });
+                _mapped_plot_data.numeric.insert( {name,  PlotDataPtr(new PlotData( name )) });
             }
             _curvelist_widget->sortColumns();
         }
@@ -960,29 +960,54 @@ void MainWindow::onActionReloadRecentDataFile()
     }
 }
 
-
-void MainWindow::importPlotDataMap(const PlotDataMap& new_data, bool delete_older)
+template <typename T>
+void importPlotDataMapHelper(std::unordered_map<std::string,T>& source,
+                             std::unordered_map<std::string,std::shared_ptr<T>>& destination,
+                             bool delete_older)
 {
-    // overwrite the old user_defined map
-    _mapped_plot_data.user_defined = new_data.user_defined;
+    for (auto& it: source)
+    {
+        const std::string& name  = it.first;
+        T& source_plot  = it.second;
+        auto plot_with_same_name = destination.find(name);
 
+        // this is a new plot
+        if( plot_with_same_name == destination.end() )
+        {
+            plot_with_same_name = destination.insert( {name, std::make_shared<T>(name) } ).first;
+        }
+        else{
+            if( delete_older ){
+                plot_with_same_name->second->clear();
+            }
+        }
+
+        while( source_plot.size() > 0)
+        {
+            plot_with_same_name->second->pushBack( source_plot.front() );
+            source_plot.popFront();
+        }
+
+    }
+}
+
+
+void MainWindow::importPlotDataMap(PlotDataMapRef& new_data, bool delete_older)
+{
+    bool curvelist_modified = false;
     for (auto& it: new_data.numeric)
     {
         const std::string& name  = it.first;
-        PlotDataPtr plot  = it.second;
-        auto plot_with_same_name = _mapped_plot_data.numeric.find(name);
-
-        // this is a new plot
-        if( plot_with_same_name == _mapped_plot_data.numeric.end() )
+        if( _mapped_plot_data.numeric.count(name) == 0)
         {
             _curvelist_widget->addItem( QString::fromStdString( name ), false );
-            _mapped_plot_data.numeric.insert( std::make_pair(name, plot) );
-        }
-        else{ // a plot with the same name existed already, overwrite it
-            plot_with_same_name->second = plot;
+            curvelist_modified = true;
         }
     }
-    _curvelist_widget->sortColumns();
+    //---------------------------------------------
+    importPlotDataMapHelper( new_data.user_defined, _mapped_plot_data.user_defined, delete_older );
+    importPlotDataMapHelper( new_data.numeric, _mapped_plot_data.numeric, delete_older );
+    //---------------------------------------------
 
     if( delete_older && _mapped_plot_data.numeric.size() > new_data.numeric.size() )
     {
@@ -993,6 +1018,7 @@ void MainWindow::importPlotDataMap(const PlotDataMap& new_data, bool delete_olde
                                       QMessageBox::Yes );
         if( reply == QMessageBox::Yes )
         {
+            curvelist_modified = true;
             std::vector<std::string> data_to_remove;
 
             for (auto& it: _mapped_plot_data.numeric )
@@ -1004,11 +1030,15 @@ void MainWindow::importPlotDataMap(const PlotDataMap& new_data, bool delete_olde
             }
             for (auto& to_remove: data_to_remove )
             {
-                this->deleteDataOfSingleCurve( QString( to_remove.c_str() ) );
+                this->deleteDataOfSingleCurve( QString::fromStdString( to_remove ) );
             }
         }
     }
-
+    if( curvelist_modified )
+    {
+        _curvelist_widget->sortColumns();
+    }
+    //---------------------------------------------
     forEachWidget( [](PlotWidget* plot) {
         plot->reloadPlotData();
     } );
@@ -1091,7 +1121,7 @@ void MainWindow::onActionLoadDataFileImpl(QString filename, bool reuse_last_conf
         ui->actionDeleteAllData->setEnabled( true );
         ui->actionReloadPrevious->setEnabled( true );
 
-        PlotDataMap mapped_data;
+        PlotDataMapRef mapped_data;
         try{
             mapped_data = _last_dataloader->readDataFromFile( filename, reuse_last_configuration );
         }
@@ -1103,7 +1133,6 @@ void MainWindow::onActionLoadDataFileImpl(QString filename, bool reuse_last_conf
             return;
         }
 
-        // remap to different type
         importPlotDataMap(mapped_data, true);
     }
     else{
@@ -1632,26 +1661,27 @@ void MainWindow::on_ToggleStreaming()
 
 void MainWindow::updateDataAndReplot()
 {
+    if( _current_streamer )
     {
-        std::lock_guard<std::mutex> lock( _current_streamer->mutex() );
-        forEachWidget( [](PlotWidget* plot)
-        {
-            plot->updateCurves();
-        } );
-        updateTimeSlider();
+        _current_streamer->mutex().lock();
+        importPlotDataMap( _current_streamer->dataMap(), false );
     }
+
+    forEachWidget( [](PlotWidget* plot)
+    {
+        plot->updateCurves();
+    } );
+
+    if( _current_streamer )
+    {
+        _current_streamer->mutex().unlock();
+    }
+    updateTimeSlider();
+
     //--------------------------------
     // trigger again the execution of this callback if steaming == true
     if( isStreamingActive() )
     {
-        static auto prev_time = std::chrono::steady_clock::now();
-        auto time_now =  std::chrono::steady_clock::now();
-        if( (time_now - prev_time) > std::chrono::seconds(2) )
-        {
-            prev_time = time_now;
-            importPlotDataMap( _current_streamer->dataMap(), false );
-        }
-
         _replot_timer->setSingleShot(true);
         _replot_timer->stop( );
         _replot_timer->start( 40 ); // 25 Hz at most

@@ -49,7 +49,7 @@ public:
 
   typedef Value   ValueType;
 
-  PlotDataGeneric(const char* name);
+  PlotDataGeneric(const std::string& name);
 
   virtual ~PlotDataGeneric() {}
 
@@ -72,6 +72,10 @@ public:
   void setColorHint(QColor color);
 
   void setMaximumRangeX(Time max_range);
+
+  const Point& front() const { return _points.front(); }
+
+  void popFront() { _points.pop_front(); }
 
 protected:
 
@@ -96,7 +100,12 @@ typedef std::shared_ptr<PlotDataAny>  PlotDataAnyPtr;
 typedef struct{
   std::unordered_map<std::string, PlotDataPtr>     numeric;
   std::unordered_map<std::string, PlotDataAnyPtr>  user_defined;
-} PlotDataMap;
+} PlotDataMapPtr;
+
+typedef struct{
+  std::unordered_map<std::string, PlotData>     numeric;
+  std::unordered_map<std::string, PlotDataAny>  user_defined;
+} PlotDataMapRef;
 
 
 //-----------------------------------
@@ -111,7 +120,7 @@ typedef struct{
 //}
 
 template<typename Time, typename Value>
-inline PlotDataGeneric<Time, Value>::PlotDataGeneric(const char *name):
+inline PlotDataGeneric<Time, Value>::PlotDataGeneric(const std::string& name):
     _max_range_X( std::numeric_limits<Time>::max() )
     , _color_hint(Qt::black)
     , _name(name)
