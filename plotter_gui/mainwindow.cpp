@@ -1038,12 +1038,6 @@ void MainWindow::importPlotDataMap(PlotDataMapRef& new_data, bool delete_older)
     {
         _curvelist_widget->sortColumns();
     }
-    //---------------------------------------------
-    forEachWidget( [](PlotWidget* plot) {
-        plot->reloadPlotData();
-    } );
-
-    updateTimeSlider();
 }
 
 bool MainWindow::isStreamingActive() const
@@ -1195,7 +1189,10 @@ void MainWindow::onActionLoadStreamer(QString streamer_name)
     if( started )
     {
         _current_streamer->enableStreaming( false );
-        importPlotDataMap( _current_streamer->dataMap(), true );
+        {
+            std::lock_guard<std::mutex> lock( _current_streamer->mutex() );
+            importPlotDataMap( _current_streamer->dataMap(), true );
+        }
 
         for(auto& action: ui->menuStreaming->actions()) {
             action->setEnabled(false);
@@ -1663,7 +1660,7 @@ void MainWindow::updateDataAndReplot()
 {
     if( _current_streamer )
     {
-        _current_streamer->mutex().lock();
+        std::lock_guard<std::mutex> lock( _current_streamer->mutex() );
         importPlotDataMap( _current_streamer->dataMap(), false );
     }
 
@@ -1672,10 +1669,6 @@ void MainWindow::updateDataAndReplot()
         plot->updateCurves();
     } );
 
-    if( _current_streamer )
-    {
-        _current_streamer->mutex().unlock();
-    }
     updateTimeSlider();
 
     //--------------------------------
@@ -1697,29 +1690,34 @@ void MainWindow::updateDataAndReplot()
     //--------------------------------
     // zoom out and replot
     _main_tabbed_widget->currentTab()->maximumZoomOut() ;
-
     for(const auto& it: TabbedPlotWidget::instances())
     {
-        PlotMatrix* matrix =  it.second->currentTab() ;
-        matrix->maximumZoomOut(); // includes replot
+        it.second->currentTab()->maximumZoomOut( );
     }
 }
 
 void MainWindow::on_streamingSpinBox_valueChanged(int value)
 {
-    if( _current_streamer ) {
+    if( _current_streamer )
+    {
         _current_streamer->mutex().lock();
-    }
-    for (auto it : _mapped_plot_data.numeric )
-    {
-        PlotDataPtr plot = it.second;
-        plot->setMaximumRangeX( value );
-    }
 
-    for (auto it: _mapped_plot_data.user_defined)
+        for (auto& it : _current_streamer->dataMap().numeric )
+        {
+            it.second.setMaximumRangeX( value );
+        }
+        for (auto& it: _current_streamer->dataMap().user_defined)
+        {
+            it.second.setMaximumRangeX( value );
+        }
+    }
+    for (auto& it : _mapped_plot_data.numeric )
     {
-        PlotDataAnyPtr plot = it.second;
-        plot->setMaximumRangeX( value );
+        it.second->setMaximumRangeX( value );
+    }
+    for (auto& it: _mapped_plot_data.user_defined)
+    {
+        it.second->setMaximumRangeX( value );
     }
 
     if( _current_streamer ) {
@@ -1750,7 +1748,6 @@ void MainWindow::on_actionStopStreaming_triggered()
         ui->actionDeleteAllData->setToolTip("");
     }
 }
-
 
 void MainWindow::on_actionExit_triggered()
 {
